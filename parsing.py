@@ -3,6 +3,8 @@ from datetime import date, timedelta
 
 AMOUNT = re.compile(r"(?<![\w.])(\d+(?:[.,]\d{1,2})?)(?:\s*(₽|руб\.?|тенге|₸|\$|€))?(?!\w)", re.I)
 DATE = re.compile(r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\b")
+PERIOD_DMY = re.compile(r"^\s*(\d{1,2}\.\d{1,2}(?:\.\d{4})?)\s*[-–—]\s*(\d{1,2}\.\d{1,2}(?:\.\d{4})?)\s*$")
+PERIOD_ISO = re.compile(r"^\s*(\d{4}-\d{2}-\d{2})\s+(?:-|–|—)\s+(\d{4}-\d{2}-\d{2})\s*$")
 
 def parse_expense(text: str):
     text=text.strip(); category=None
@@ -31,3 +33,10 @@ def parse_day(value):
     if len(parts)==3:
         d,m,y=parts; return date(y,m,d).isoformat()
     raise ValueError('Invalid date')
+
+def parse_period(value):
+    match=PERIOD_DMY.fullmatch(value) or PERIOD_ISO.fullmatch(value)
+    if not match: raise ValueError('Invalid period')
+    start=date.fromisoformat(parse_day(match.group(1))); end=date.fromisoformat(parse_day(match.group(2)))
+    if start > end: raise ValueError('Start date is after end date')
+    return start,end
