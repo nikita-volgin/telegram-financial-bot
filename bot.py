@@ -9,6 +9,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile, BotCommand, ReplyKeyboardMarkup, KeyboardButton
 from openpyxl import Workbook
+from openpyxl.styles import Font
 from database import Database
 from parsing import parse_expense, parse_day, parse_period
 
@@ -214,8 +215,8 @@ async def send_report(m:Message,user_id,start,end,category_id=None,category_name
     total=sum(totals.values()); currency=rows[0][4]
     top=aggregate_top_expenses(rows,await db.categories(user_id))
     top_text='\n'.join(f'• {item[1]}{f" × {item[4]}" if item[4]>1 else ""} — {item[0]:g} {item[2]} ({item[3]})' for item in top)
-    text=f'📊 Отчёт{scope}: {start:%d.%m.%Y}–{end:%d.%m.%Y}\nВсего: <b>{total:g} {currency}</b>\n\n'+'\n'.join(f'• {k}: {v:g} {currency} ({v/total:.0%})' for k,v in sorted(totals.items(),key=lambda x:-x[1]))+'\n\nТоп трат:\n'+top_text
-    await m.answer(text,parse_mode='HTML'); await m.answer_document(BufferedInputFile(make_xlsx(rows,totals),'report.xlsx'),caption='Excel-выгрузка')
+    text=f'📊 Отчёт{scope}: {start:%d.%m.%Y}–{end:%d.%m.%Y}\n💰 <b>Общая сумма трат: {total:g} {currency}</b>\n\n'+'\n'.join(f'• {k}: {v:g} {currency} ({v/total:.0%})' for k,v in sorted(totals.items(),key=lambda x:-x[1]))+'\n\nТоп трат:\n'+top_text
+    await m.answer(text,parse_mode='HTML'); await m.answer_document(BufferedInputFile(make_xlsx(rows,totals),'report.xlsx'),caption=f'Excel-выгрузка • Итого: {total:g} {currency}')
 def aggregate_top_expenses(rows,categories,limit=5):
     keywords_by_category={category[1]:[keyword.strip() for keyword in category[2].split(',') if keyword.strip()] for category in categories}
     grouped={}; singles=[]
@@ -230,8 +231,11 @@ def aggregate_top_expenses(rows,categories,limit=5):
 def make_xlsx(rows,totals):
     wb=Workbook(); ws=wb.active; ws.title='Траты'; ws.append(['Дата','Описание','Сумма','Валюта','Категория'])
     for r in rows: ws.append([r[3],r[2],r[1],r[4],r[5]])
-    ss=wb.create_sheet('Сводка'); ss.append(['Категория','Сумма'])
-    for k,v in totals.items():ss.append([k,v])
+    total=sum(totals.values()); currency=rows[0][4]
+    ws.append([]); ws.append(['ИТОГО','',total,currency,'']); ws.cell(ws.max_row,1).font=Font(bold=True); ws.cell(ws.max_row,3).font=Font(bold=True)
+    ss=wb.create_sheet('Сводка'); ss.append(['Категория','Сумма','Валюта'])
+    for k,v in totals.items():ss.append([k,v,currency])
+    ss.append([]); ss.append(['ИТОГО',total,currency]); ss.cell(ss.max_row,1).font=Font(bold=True); ss.cell(ss.max_row,2).font=Font(bold=True)
     from io import BytesIO
     out=BytesIO(); wb.save(out); return out.getvalue()
 @router.callback_query(F.data.startswith('delete:'))
